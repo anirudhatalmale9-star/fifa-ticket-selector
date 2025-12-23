@@ -386,26 +386,54 @@ const ACTION_DELAY = 2000; // Delay between actions in ms (increased for slow lo
         let categoryFound = false;
         let categoryEl = null;
 
-        for (let attempt = 0; attempt < 5; attempt++) {
-          // Search entire document for category elements
-          const allCategories = document.querySelectorAll('[id*="stx-lt-seatCategory-name"]');
-          console.log(`[FIFA Selector] Attempt ${attempt + 1}: Found ${allCategories.length} category elements in document`);
+        // Re-find the container after expansion (DOM may have changed)
+        const expandedContainer = findMatchContainer(matchNumber) || container;
 
-          for (const el of allCategories) {
+        for (let attempt = 0; attempt < 5; attempt++) {
+          // IMPORTANT: First search WITHIN the match container only
+          let categoryElements = expandedContainer.querySelectorAll('[id*="stx-lt-seatCategory-name"]');
+          console.log(`[FIFA Selector] Attempt ${attempt + 1}: Found ${categoryElements.length} category elements in match container`);
+
+          // If none in container, search document but verify it's near our match
+          if (categoryElements.length === 0) {
+            categoryElements = document.querySelectorAll('[id*="stx-lt-seatCategory-name"]');
+            console.log(`[FIFA Selector] Searching document: Found ${categoryElements.length} total category elements`);
+          }
+
+          for (const el of categoryElements) {
             const text = el.textContent?.trim() || '';
             if (text === `Category ${category}`) {
-              // Find the clickable parent
-              let clickable = el.closest('[role="button"]') ||
-                              el.closest('[aria-controls]') ||
-                              el.closest('[aria-expanded]');
+              // CRITICAL: Verify this category belongs to our match by checking if it's inside our container
+              // or by checking if it's near our match number in the DOM
+              const isInContainer = expandedContainer.contains(el);
 
-              if (clickable) {
-                console.log(`[FIFA Selector] Found Category ${category}, clicking to expand...`);
-                clickable.click();
-                await delay(ACTION_DELAY);
-                categoryEl = clickable;
-                categoryFound = true;
-                break;
+              // Also check by looking for Match X text nearby
+              let parentCheck = el.parentElement;
+              let matchTextNearby = false;
+              for (let i = 0; i < 20 && parentCheck; i++) {
+                if (parentCheck.textContent?.includes(`Match ${matchNumber}`)) {
+                  matchTextNearby = true;
+                  break;
+                }
+                parentCheck = parentCheck.parentElement;
+              }
+
+              console.log(`[FIFA Selector] Category ${category} - inContainer: ${isInContainer}, matchTextNearby: ${matchTextNearby}`);
+
+              if (isInContainer || matchTextNearby) {
+                // Find the clickable parent
+                let clickable = el.closest('[role="button"]') ||
+                                el.closest('[aria-controls]') ||
+                                el.closest('[aria-expanded]');
+
+                if (clickable) {
+                  console.log(`[FIFA Selector] Found Category ${category} for Match ${matchNumber}, clicking to expand...`);
+                  clickable.click();
+                  await delay(ACTION_DELAY);
+                  categoryEl = clickable;
+                  categoryFound = true;
+                  break;
+                }
               }
             }
           }
@@ -426,21 +454,45 @@ const ACTION_DELAY = 2000; // Delay between actions in ms (increased for slow lo
         // The + button has aria-label="Increase quantity..." or class containing "increase"
         let qtyOk = false;
 
-        // Strategy 1: Find by aria-label containing "Increase quantity"
-        const increaseButtons = document.querySelectorAll('button[aria-label*="Increase quantity"]');
-        console.log(`[FIFA Selector] Found ${increaseButtons.length} increase buttons by aria-label`);
+        // Strategy 1: Find by aria-label containing "Increase quantity" - prefer buttons inside our container
+        const increaseButtonsInContainer = expandedContainer.querySelectorAll('button[aria-label*="Increase quantity"]');
+        const increaseButtonsAll = document.querySelectorAll('button[aria-label*="Increase quantity"]');
+
+        // Try container first, then all
+        const increaseButtons = increaseButtonsInContainer.length > 0 ? increaseButtonsInContainer : increaseButtonsAll;
+        console.log(`[FIFA Selector] Found ${increaseButtons.length} increase buttons by aria-label (${increaseButtonsInContainer.length} in container)`);
 
         for (const btn of increaseButtons) {
           const rect = btn.getBoundingClientRect();
-          // Only consider visible buttons
-          if (rect.width > 0 && rect.height > 0) {
-            console.log(`[FIFA Selector] Found + button via aria-label, clicking ${quantity} times...`);
-            for (let i = 0; i < quantity; i++) {
-              btn.click();
-              await delay(500);
+          // Only consider visible buttons that are in viewport
+          if (rect.width > 0 && rect.height > 0 && rect.top > 0 && rect.top < window.innerHeight) {
+            // Verify this button is for our category by checking aria-label contains "Category X"
+            const ariaLabel = btn.getAttribute('aria-label') || '';
+            if (ariaLabel.includes(`Category ${category}`)) {
+              console.log(`[FIFA Selector] Found + button via aria-label for Category ${category}, clicking ${quantity} times...`);
+              for (let i = 0; i < quantity; i++) {
+                btn.click();
+                await delay(500);
+              }
+              qtyOk = true;
+              break;
             }
-            qtyOk = true;
-            break;
+          }
+        }
+
+        // Fallback: click any visible + button if we didn't find category-specific one
+        if (!qtyOk) {
+          for (const btn of increaseButtons) {
+            const rect = btn.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0 && rect.top > 0 && rect.top < window.innerHeight) {
+              console.log(`[FIFA Selector] Found + button via aria-label (fallback), clicking ${quantity} times...`);
+              for (let i = 0; i < quantity; i++) {
+                btn.click();
+                await delay(500);
+              }
+              qtyOk = true;
+              break;
+            }
           }
         }
 
