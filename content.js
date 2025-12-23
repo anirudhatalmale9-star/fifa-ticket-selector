@@ -60,34 +60,73 @@ const ACTION_DELAY = 2000; // Delay between actions in ms (increased for slow lo
 
   // Find match container by match number
   function findMatchContainer(matchNumber) {
-    // Find all elements containing "Match X" where X is our number
-    const allElements = document.querySelectorAll('*');
+    console.log(`[FIFA Selector] Looking for Match ${matchNumber} container...`);
 
-    for (const el of allElements) {
-      // Check for exact Match X text in children
-      for (const child of el.children) {
-        const text = child.textContent?.trim();
-        if (text === `Match ${matchNumber}`) {
-          // Found match title, now find the container that has categories
+    // Strategy 1: Find elements that contain EXACTLY "Match X" as their text
+    // Look for heading-like elements that show match titles
+    const matchTitleSelectors = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'p'];
+
+    for (const selector of matchTitleSelectors) {
+      const elements = document.querySelectorAll(selector);
+      for (const el of elements) {
+        // Get DIRECT text content only (not from children)
+        const directText = Array.from(el.childNodes)
+          .filter(n => n.nodeType === Node.TEXT_NODE)
+          .map(n => n.textContent.trim())
+          .join('');
+
+        // Also check full text for exact match
+        const fullText = el.textContent?.trim();
+
+        // Match exactly "Match X" (not "Match 17" when looking for "Match 1")
+        const exactMatch = `Match ${matchNumber}`;
+
+        if (directText === exactMatch || fullText === exactMatch) {
+          console.log(`[FIFA Selector] Found exact match title: "${fullText}"`);
+
+          // Found match title, now find the container that has the Show more button
           let container = el;
-          for (let i = 0; i < 15; i++) {
+          for (let i = 0; i < 20; i++) {
             if (container.parentElement) {
               container = container.parentElement;
-              // Check if this container has category info
-              if (container.querySelector('[class*="seatCategory"]') ||
-                  container.querySelector('[id*="seatCategory"]') ||
-                  container.textContent.includes('Category 1')) {
+              // Check if this container has "Show more" or categories
+              const hasShowMore = container.textContent?.includes('Show more') || container.textContent?.includes('Show less');
+              const hasCategories = container.querySelector('[class*="seatCategory"]') ||
+                                   container.querySelector('[id*="seatCategory"]') ||
+                                   container.textContent?.includes('Category 1');
+
+              if (hasShowMore || hasCategories) {
                 console.log(`[FIFA Selector] Found container for Match ${matchNumber}`);
                 return container;
               }
             }
           }
-          // Return what we found even if not ideal
+          // Return what we found
           return el.parentElement?.parentElement?.parentElement || el;
         }
       }
     }
 
+    // Strategy 2: Look for # M{number} pattern (like "# M3", "# M17")
+    const allElements = document.querySelectorAll('*');
+    for (const el of allElements) {
+      const text = el.textContent?.trim();
+      if (text === `# M${matchNumber}` || text === `#M${matchNumber}` || text === `M${matchNumber}`) {
+        console.log(`[FIFA Selector] Found match via # M pattern: "${text}"`);
+        let container = el;
+        for (let i = 0; i < 20; i++) {
+          if (container.parentElement) {
+            container = container.parentElement;
+            if (container.textContent?.includes('Show more') || container.textContent?.includes('Category')) {
+              return container;
+            }
+          }
+        }
+        return el.parentElement?.parentElement?.parentElement || el;
+      }
+    }
+
+    console.warn(`[FIFA Selector] Could not find container for Match ${matchNumber}`);
     return null;
   }
 
