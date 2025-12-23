@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "FIFA Ticket Selector",
+  "version": "1.0.0",
+  "description": "Auto-select FIFA World Cup 2026 ticket matches with one hotkey",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": [
+    "https://*.tickets.fifa.com/*",
+    "https://fifa-fwc26-us.tickets.fifa.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.tickets.fifa.com/*",
+        "https://fifa-fwc26-us.tickets.fifa.com/*"
+      ],
+      "js": ["config.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "select-all-matches": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
+      "description": "Select all configured matches"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
