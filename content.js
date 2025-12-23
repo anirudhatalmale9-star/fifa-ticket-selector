@@ -346,25 +346,75 @@ const ACTION_DELAY = 2000; // Delay between actions in ms (increased for slow lo
 
         console.log(`[FIFA Selector] Found Match ${matchNumber}`);
 
-        // Expand match
+        // Expand match (click "Show more")
         await expandMatch(container);
         await delay(ACTION_DELAY);
 
-        // Re-find container after expansion (DOM may have changed)
-        const expandedContainer = findMatchContainer(matchNumber) || container;
+        // Wait for categories to load - poll until we find them or timeout
+        console.log(`[FIFA Selector] Waiting for categories to load...`);
+        let categoryFound = false;
+        let categoryEl = null;
 
-        // Select category
-        const categoryEl = await selectCategory(expandedContainer, category);
-        if (!categoryEl) {
-          console.warn(`[FIFA Selector] Could not select Category ${category} for Match ${matchNumber}`);
+        for (let attempt = 0; attempt < 5; attempt++) {
+          // Search entire document for category elements
+          const allCategories = document.querySelectorAll('[id*="stx-lt-seatCategory-name"]');
+          console.log(`[FIFA Selector] Attempt ${attempt + 1}: Found ${allCategories.length} category elements in document`);
+
+          for (const el of allCategories) {
+            const text = el.textContent?.trim() || '';
+            if (text === `Category ${category}`) {
+              // Find the clickable parent
+              let clickable = el.closest('[role="button"]') ||
+                              el.closest('[aria-controls]') ||
+                              el.closest('[aria-expanded]');
+
+              if (clickable) {
+                console.log(`[FIFA Selector] Found Category ${category}, clicking to expand...`);
+                clickable.click();
+                await delay(ACTION_DELAY);
+                categoryEl = clickable;
+                categoryFound = true;
+                break;
+              }
+            }
+          }
+
+          if (categoryFound) break;
+          await delay(1000); // Wait 1 second before next attempt
+        }
+
+        if (!categoryFound) {
+          console.warn(`[FIFA Selector] Could not find Category ${category} for Match ${matchNumber}`);
           failCount++;
           continue;
         }
 
         await delay(ACTION_DELAY);
 
-        // Set quantity
-        const qtyOk = await setQuantity(container, categoryEl, quantity);
+        // Now find and click the + button (it should be visible after clicking the category)
+        // Search for + button in the expanded category area
+        const plusButtons = document.querySelectorAll('button');
+        let qtyOk = false;
+
+        for (const btn of plusButtons) {
+          const text = btn.textContent?.trim();
+          const rect = btn.getBoundingClientRect();
+          // Only consider visible + buttons
+          if (text === '+' && rect.width > 0 && rect.height > 0) {
+            console.log(`[FIFA Selector] Found + button, clicking ${quantity} times...`);
+            for (let i = 0; i < quantity; i++) {
+              btn.click();
+              await delay(300);
+            }
+            qtyOk = true;
+            break;
+          }
+        }
+
+        // Old method as fallback
+        if (!qtyOk) {
+          qtyOk = await setQuantity(container, categoryEl, quantity);
+        }
         if (qtyOk) {
           successCount++;
           console.log(`[FIFA Selector] Match ${matchNumber} completed!`);
