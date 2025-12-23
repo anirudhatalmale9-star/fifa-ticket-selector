@@ -17,7 +17,7 @@ const MATCH_CONFIG = [
   // { matchNumber: 10, category: 2, quantity: 2 },
 ];
 
-const ACTION_DELAY = 1000; // Delay between actions in ms
+const ACTION_DELAY = 2000; // Delay between actions in ms (increased for slow loading)
 // ========== END CONFIGURATION ==========
 
 (function() {
@@ -120,9 +120,17 @@ const ACTION_DELAY = 1000; // Delay between actions in ms
   async function selectCategory(container, categoryNumber) {
     console.log(`[FIFA Selector] Looking for Category ${categoryNumber}...`);
 
-    // BEST Strategy: Find by stx-lt-seatCategory-name ID pattern (from FIFA's actual HTML)
-    const categoryNameElements = container.querySelectorAll('[id*="stx-lt-seatCategory-name"]');
-    console.log(`[FIFA Selector] Found ${categoryNameElements.length} stx-lt-seatCategory-name elements`);
+    // BEST Strategy: Search the ENTIRE DOCUMENT for stx-lt-seatCategory-name, then find ones within/near our container
+    // First try within container
+    let categoryNameElements = container.querySelectorAll('[id*="stx-lt-seatCategory-name"]');
+    console.log(`[FIFA Selector] Found ${categoryNameElements.length} stx-lt-seatCategory-name elements in container`);
+
+    // If none found in container, search entire document and find elements that are visible/near the match
+    if (categoryNameElements.length === 0) {
+      console.log(`[FIFA Selector] Searching entire document for category elements...`);
+      categoryNameElements = document.querySelectorAll('[id*="stx-lt-seatCategory-name"]');
+      console.log(`[FIFA Selector] Found ${categoryNameElements.length} stx-lt-seatCategory-name elements in document`);
+    }
 
     for (const el of categoryNameElements) {
       const text = el.textContent?.trim() || '';
@@ -342,8 +350,11 @@ const ACTION_DELAY = 1000; // Delay between actions in ms
         await expandMatch(container);
         await delay(ACTION_DELAY);
 
+        // Re-find container after expansion (DOM may have changed)
+        const expandedContainer = findMatchContainer(matchNumber) || container;
+
         // Select category
-        const categoryEl = await selectCategory(container, category);
+        const categoryEl = await selectCategory(expandedContainer, category);
         if (!categoryEl) {
           console.warn(`[FIFA Selector] Could not select Category ${category} for Match ${matchNumber}`);
           failCount++;
