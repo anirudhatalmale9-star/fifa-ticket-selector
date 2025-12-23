@@ -120,6 +120,30 @@ const ACTION_DELAY = 1000; // Delay between actions in ms
   async function selectCategory(container, categoryNumber) {
     console.log(`[FIFA Selector] Looking for Category ${categoryNumber}...`);
 
+    // BEST Strategy: Find by stx-lt-seatCategory-name ID pattern (from FIFA's actual HTML)
+    const categoryNameElements = container.querySelectorAll('[id*="stx-lt-seatCategory-name"]');
+    console.log(`[FIFA Selector] Found ${categoryNameElements.length} stx-lt-seatCategory-name elements`);
+
+    for (const el of categoryNameElements) {
+      const text = el.textContent?.trim() || '';
+      console.log(`[FIFA Selector] Checking element with text: "${text}"`);
+
+      // Check if this is our category (exact match, exclude accessibility)
+      if (text === `Category ${categoryNumber}`) {
+        // Find the clickable parent with role="button" or aria-controls
+        let clickable = el.closest('[role="button"]') ||
+                        el.closest('[aria-controls]') ||
+                        el.closest('[aria-expanded]');
+
+        if (clickable) {
+          console.log(`[FIFA Selector] Found Category ${categoryNumber} via stx-lt-seatCategory-name, clicking...`);
+          clickable.click();
+          await delay(ACTION_DELAY);
+          return clickable;
+        }
+      }
+    }
+
     // Strategy 1: Look for stx-class elements (FIFA's pattern from DevTools)
     const stxElements = container.querySelectorAll('[class*="stx-"], [class*="dialog"], [class*="tariff"]');
     console.log(`[FIFA Selector] Found ${stxElements.length} stx/dialog/tariff elements`);
