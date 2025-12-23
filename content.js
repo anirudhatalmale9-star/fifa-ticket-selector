@@ -3,31 +3,87 @@
  * Automatically selects configured matches on the FIFA ticket lottery page
  */
 
+// ========== CONFIGURATION - EDIT YOUR MATCHES HERE ==========
+const MATCH_CONFIG = [
+  { matchNumber: 1, category: 2, quantity: 2 },
+  { matchNumber: 2, category: 2, quantity: 2 },
+  { matchNumber: 3, category: 2, quantity: 2 },
+  { matchNumber: 4, category: 2, quantity: 2 },
+  { matchNumber: 5, category: 2, quantity: 2 },
+  // { matchNumber: 6, category: 2, quantity: 2 },
+  // { matchNumber: 7, category: 2, quantity: 2 },
+  // { matchNumber: 8, category: 2, quantity: 2 },
+  // { matchNumber: 9, category: 2, quantity: 2 },
+  // { matchNumber: 10, category: 2, quantity: 2 },
+];
+
+const ACTION_DELAY = 1000; // Delay between actions in ms
+// ========== END CONFIGURATION ==========
+
 (function() {
   'use strict';
 
-  // Helper function to wait/delay
   function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // Helper function to find match card by match number
-  function findMatchCard(matchNumber) {
-    // Look for match cards with "Match X" text
-    const matchCards = document.querySelectorAll('[class*="match"], [class*="Match"], [data-match], article, section');
+  // Find all match containers on the page
+  function getAllMatchContainers() {
+    // Look for containers with stx-expandable-tariffs or similar classes
+    const containers = document.querySelectorAll('[id*="stx-expandable-tariffs-container"], [class*="tariffs-container"]');
+    if (containers.length > 0) {
+      return Array.from(containers);
+    }
 
-    for (const card of matchCards) {
-      const text = card.textContent;
-      // Match patterns like "Match 1", "Match 2", "#M1", "#M2", "# M1", etc.
-      const patterns = [
-        new RegExp(`Match\\s*${matchNumber}\\b`, 'i'),
-        new RegExp(`#\\s*M${matchNumber}\\b`, 'i'),
-        new RegExp(`M${matchNumber}\\b`)
-      ];
+    // Fallback: find by looking for Match X text
+    const allDivs = document.querySelectorAll('div');
+    const matchContainers = [];
 
-      for (const pattern of patterns) {
-        if (pattern.test(text)) {
-          return card;
+    for (const div of allDivs) {
+      if (div.textContent.includes('Match ') && div.textContent.includes('Show more')) {
+        // Check if we already have a parent of this
+        let dominated = false;
+        for (const existing of matchContainers) {
+          if (existing.contains(div)) {
+            dominated = true;
+            break;
+          }
+        }
+        if (!dominated) {
+          matchContainers.push(div);
+        }
+      }
+    }
+
+    return matchContainers;
+  }
+
+  // Find match container by match number
+  function findMatchContainer(matchNumber) {
+    // Find all elements containing "Match X" where X is our number
+    const allElements = document.querySelectorAll('*');
+
+    for (const el of allElements) {
+      // Check for exact Match X text in children
+      for (const child of el.children) {
+        const text = child.textContent?.trim();
+        if (text === `Match ${matchNumber}`) {
+          // Found match title, now find the container that has categories
+          let container = el;
+          for (let i = 0; i < 15; i++) {
+            if (container.parentElement) {
+              container = container.parentElement;
+              // Check if this container has category info
+              if (container.querySelector('[class*="seatCategory"]') ||
+                  container.querySelector('[id*="seatCategory"]') ||
+                  container.textContent.includes('Category 1')) {
+                console.log(`[FIFA Selector] Found container for Match ${matchNumber}`);
+                return container;
+              }
+            }
+          }
+          // Return what we found even if not ideal
+          return el.parentElement?.parentElement?.parentElement || el;
         }
       }
     }
@@ -35,162 +91,207 @@
     return null;
   }
 
-  // Helper function to find and click "Show more" button within a match card
-  async function expandMatch(matchCard) {
-    const showMoreBtn = matchCard.querySelector('button, [role="button"], a, span');
-    const buttons = matchCard.querySelectorAll('button, [role="button"], a, span, div[class*="click"], div[class*="expand"]');
+  // Expand match to show categories
+  async function expandMatch(container) {
+    // Look for "Show more" text
+    const allSpans = container.querySelectorAll('span, div, a, button');
 
-    for (const btn of buttons) {
-      const text = btn.textContent.toLowerCase().trim();
-      if (text.includes('show more') || text.includes('expand') || text.includes('details')) {
-        btn.click();
+    for (const el of allSpans) {
+      const text = el.textContent?.trim()?.toLowerCase();
+      if (text === 'show more') {
+        console.log('[FIFA Selector] Clicking Show more');
+        el.click();
         await delay(ACTION_DELAY);
         return true;
       }
     }
 
-    // Try clicking on the match card itself if it's expandable
-    const clickableArea = matchCard.querySelector('[class*="header"], [class*="title"], [class*="clickable"]');
-    if (clickableArea) {
-      clickableArea.click();
-      await delay(ACTION_DELAY);
-      return true;
+    // Try finding expandable elements with aria-expanded
+    const expandables = container.querySelectorAll('[aria-expanded="false"]');
+    for (const exp of expandables) {
+      exp.click();
+      await delay(ACTION_DELAY / 2);
     }
 
     return false;
   }
 
-  // Helper function to select a category within a match card
-  async function selectCategory(matchCard, categoryNumber) {
-    // Look for category options - they might be radio buttons, buttons, or clickable divs
-    const categorySelectors = [
-      `[data-category="${categoryNumber}"]`,
-      `input[value="${categoryNumber}"]`,
-      `input[value="category${categoryNumber}"]`,
-      `[class*="category-${categoryNumber}"]`,
-      `[class*="category${categoryNumber}"]`
-    ];
+  // Select category within the match container
+  async function selectCategory(container, categoryNumber) {
+    console.log(`[FIFA Selector] Looking for Category ${categoryNumber}...`);
 
-    // First try direct selectors
-    for (const selector of categorySelectors) {
-      const element = matchCard.querySelector(selector);
-      if (element) {
-        element.click();
-        await delay(ACTION_DELAY / 2);
-        return true;
+    // Strategy 1: Look for stx-class elements (FIFA's pattern from DevTools)
+    const stxElements = container.querySelectorAll('[class*="stx-"], [class*="dialog"], [class*="tariff"]');
+    console.log(`[FIFA Selector] Found ${stxElements.length} stx/dialog/tariff elements`);
+
+    // Strategy 2: Find all expandable tariff sections
+    const tariffSections = container.querySelectorAll('[class*="expandable-tariff"], [id*="expandable-tariff"], [aria-controls*="tariff"]');
+    console.log(`[FIFA Selector] Found ${tariffSections.length} tariff sections`);
+
+    // Strategy 3: Look for the category row/accordion
+    const allClickables = container.querySelectorAll('[role="button"], [aria-expanded], button, [class*="accordion"], [class*="expandable"], [class*="stx-expandable"]');
+
+    for (const clickable of allClickables) {
+      const text = clickable.textContent || '';
+      // Check if this is our category (exclude accessibility categories)
+      if (text.includes(`Category ${categoryNumber}`) &&
+          !text.includes('Wheelchair') &&
+          !text.includes('Easy Access') &&
+          !text.includes('Companion') &&
+          !text.includes('Accessibility')) {
+        // Make sure it's the main category with a price
+        if (text.includes('USD') || text.includes('$')) {
+          console.log(`[FIFA Selector] Found Category ${categoryNumber}, clicking...`);
+          clickable.click();
+          await delay(ACTION_DELAY);
+          return clickable;
+        }
       }
     }
 
-    // Look for category text and click its parent/container
-    const allElements = matchCard.querySelectorAll('*');
-    for (const el of allElements) {
-      const text = el.textContent.trim();
-      // Match "Category 1", "Category 2", "Category 3" exactly
-      if (text === `Category ${categoryNumber}` || text === `Category${categoryNumber}`) {
-        // Find the clickable parent (usually a div or label)
-        let clickTarget = el;
-        let parent = el.parentElement;
+    // Strategy 4: Look for colored squares (category indicators) with data attributes
+    const categoryIndicators = container.querySelectorAll('[class*="category"], [data-category], [class*="seat"]');
+    for (const indicator of categoryIndicators) {
+      const parent = indicator.closest('[aria-expanded]') || indicator.parentElement?.closest('[aria-expanded]');
+      if (parent) {
+        const text = parent.textContent || '';
+        if (text.includes(`Category ${categoryNumber}`) && !text.includes('Wheelchair') && !text.includes('Easy Access')) {
+          console.log(`[FIFA Selector] Found via indicator, clicking...`);
+          parent.click();
+          await delay(ACTION_DELAY);
+          return parent;
+        }
+      }
+    }
 
-        // Look for a clickable parent container
-        for (let i = 0; i < 5 && parent; i++) {
-          if (parent.onclick || parent.getAttribute('role') === 'button' ||
-              parent.tagName === 'LABEL' || parent.tagName === 'BUTTON' ||
-              parent.classList.contains('clickable') ||
-              parent.style.cursor === 'pointer') {
-            clickTarget = parent;
-            break;
-          }
-          // Check if parent has a radio/checkbox input
-          const input = parent.querySelector('input[type="radio"], input[type="checkbox"]');
-          if (input) {
-            clickTarget = input;
+    // Strategy 5: Look for elements with seatCategory in class/id
+    const categoryElements = container.querySelectorAll('[class*="seatCategory"], [id*="seatCategory"]');
+    for (const el of categoryElements) {
+      const text = el.textContent || '';
+      if (text.trim().startsWith(`Category ${categoryNumber}`) || text.includes(`Category ${categoryNumber}`)) {
+        // Find the clickable parent
+        let target = el;
+        let parent = el.parentElement;
+        for (let i = 0; i < 8 && parent; i++) {
+          if (parent.getAttribute('aria-expanded') !== null ||
+              parent.getAttribute('role') === 'button' ||
+              parent.classList.contains('expandable') ||
+              parent.onclick) {
+            target = parent;
             break;
           }
           parent = parent.parentElement;
         }
+        console.log(`[FIFA Selector] Clicking category element`);
+        target.click();
+        await delay(ACTION_DELAY);
+        return target;
+      }
+    }
 
-        clickTarget.click();
-        await delay(ACTION_DELAY / 2);
-
-        // Also try to expand category if there's a dropdown
-        const expandBtn = clickTarget.closest('[class*="category"], [class*="accordion"]')?.querySelector('[class*="expand"], [class*="arrow"], [class*="chevron"]');
-        if (expandBtn) {
-          expandBtn.click();
-          await delay(ACTION_DELAY / 2);
+    // Strategy 6: Find by text content directly
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      if (node.textContent.trim() === `Category ${categoryNumber}`) {
+        let clickTarget = node.parentElement;
+        // Go up to find clickable
+        for (let i = 0; i < 5 && clickTarget; i++) {
+          if (clickTarget.getAttribute('aria-expanded') !== null) {
+            console.log(`[FIFA Selector] Found via text walker, clicking...`);
+            clickTarget.click();
+            await delay(ACTION_DELAY);
+            return clickTarget;
+          }
+          clickTarget = clickTarget.parentElement;
         }
-
-        return true;
+        // Just click the parent
+        if (node.parentElement) {
+          node.parentElement.click();
+          await delay(ACTION_DELAY);
+          return node.parentElement;
+        }
       }
     }
 
-    // Fallback: look for any expandable/selectable rows with category in name
-    const rows = matchCard.querySelectorAll('[class*="row"], [class*="option"], [class*="item"], tr, li');
-    for (const row of rows) {
-      if (row.textContent.includes(`Category ${categoryNumber}`)) {
-        row.click();
-        await delay(ACTION_DELAY / 2);
-        return true;
+    // Strategy 7: Click any element that contains exactly "Category X" text
+    const allDivs = container.querySelectorAll('div, span, li, a');
+    for (const div of allDivs) {
+      // Check direct text content (not including children)
+      const directText = Array.from(div.childNodes)
+        .filter(n => n.nodeType === Node.TEXT_NODE)
+        .map(n => n.textContent.trim())
+        .join('');
+
+      if (directText === `Category ${categoryNumber}`) {
+        // Find closest clickable ancestor
+        let clickable = div.closest('[aria-expanded]') ||
+                        div.closest('[role="button"]') ||
+                        div.closest('button') ||
+                        div.parentElement;
+        if (clickable) {
+          console.log(`[FIFA Selector] Found via direct text match, clicking...`);
+          clickable.click();
+          await delay(ACTION_DELAY);
+          return clickable;
+        }
       }
     }
 
-    return false;
+    return null;
   }
 
-  // Helper function to set quantity using +/- buttons
-  async function setQuantity(matchCard, quantity) {
-    // Find quantity controls within the category section
-    const plusButtons = matchCard.querySelectorAll('button, [role="button"]');
+  // Set quantity using + button
+  async function setQuantity(container, categoryElement, quantity) {
+    // Find + button near the category
+    let searchArea = categoryElement || container;
+
+    // If category is expanded, look for + button in that section
+    const plusButtons = searchArea.querySelectorAll('button');
     let plusBtn = null;
     let minusBtn = null;
-    let quantityInput = null;
 
     for (const btn of plusButtons) {
-      const text = btn.textContent.trim();
-      const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
-
-      if (text === '+' || ariaLabel.includes('add') || ariaLabel.includes('increase') || ariaLabel.includes('plus')) {
+      const text = btn.textContent?.trim();
+      if (text === '+') {
         plusBtn = btn;
       }
-      if (text === '-' || text === '−' || ariaLabel.includes('remove') || ariaLabel.includes('decrease') || ariaLabel.includes('minus')) {
+      if (text === '-' || text === '−') {
         minusBtn = btn;
       }
     }
 
-    // Also look for number input
-    quantityInput = matchCard.querySelector('input[type="number"], input[class*="quantity"], input[class*="qty"]');
-
-    if (quantityInput) {
-      // Direct input if available
-      quantityInput.value = quantity;
-      quantityInput.dispatchEvent(new Event('input', { bubbles: true }));
-      quantityInput.dispatchEvent(new Event('change', { bubbles: true }));
-      await delay(ACTION_DELAY / 2);
-      return true;
+    // If not found, search wider
+    if (!plusBtn) {
+      const allButtons = container.querySelectorAll('button');
+      for (const btn of allButtons) {
+        const text = btn.textContent?.trim();
+        // Only get buttons that are visible
+        if (text === '+' && btn.offsetParent !== null) {
+          plusBtn = btn;
+        }
+        if ((text === '-' || text === '−') && btn.offsetParent !== null) {
+          minusBtn = btn;
+        }
+      }
     }
 
     if (plusBtn) {
-      // Click plus button the required number of times
-      // First, reset to 0 by clicking minus until disabled or value is 0
-      if (minusBtn) {
-        for (let i = 0; i < 10; i++) {
-          if (minusBtn.disabled) break;
-          minusBtn.click();
-          await delay(100);
-        }
-      }
+      console.log(`[FIFA Selector] Found +/- buttons, setting quantity to ${quantity}`);
 
-      // Now click plus to reach desired quantity
+      // Click plus button the required times
       for (let i = 0; i < quantity; i++) {
         plusBtn.click();
-        await delay(150);
+        await delay(300);
       }
       return true;
     }
 
+    console.log('[FIFA Selector] Plus button not found');
     return false;
   }
 
-  // Main function to select all configured matches
+  // Main function
   async function selectAllMatches() {
     console.log('[FIFA Selector] Starting auto-selection...');
     console.log('[FIFA Selector] Config:', MATCH_CONFIG);
@@ -203,56 +304,58 @@
       console.log(`[FIFA Selector] Processing Match ${matchNumber}, Category ${category}, Qty ${quantity}`);
 
       try {
-        // Find the match card
-        const matchCard = findMatchCard(matchNumber);
-        if (!matchCard) {
-          console.warn(`[FIFA Selector] Match ${matchNumber} not found on page`);
+        // Find match container
+        const container = findMatchContainer(matchNumber);
+        if (!container) {
+          console.warn(`[FIFA Selector] Match ${matchNumber} not found`);
           failCount++;
           continue;
         }
 
         console.log(`[FIFA Selector] Found Match ${matchNumber}`);
 
-        // Expand the match to show categories
-        await expandMatch(matchCard);
+        // Expand match
+        await expandMatch(container);
         await delay(ACTION_DELAY);
 
-        // Select the category
-        const categorySelected = await selectCategory(matchCard, category);
-        if (!categorySelected) {
+        // Select category
+        const categoryEl = await selectCategory(container, category);
+        if (!categoryEl) {
           console.warn(`[FIFA Selector] Could not select Category ${category} for Match ${matchNumber}`);
+          failCount++;
+          continue;
         }
+
+        await delay(ACTION_DELAY);
 
         // Set quantity
-        const quantitySet = await setQuantity(matchCard, quantity);
-        if (!quantitySet) {
-          console.warn(`[FIFA Selector] Could not set quantity for Match ${matchNumber}`);
-        }
-
-        if (categorySelected || quantitySet) {
+        const qtyOk = await setQuantity(container, categoryEl, quantity);
+        if (qtyOk) {
           successCount++;
+          console.log(`[FIFA Selector] Match ${matchNumber} completed!`);
         } else {
+          console.warn(`[FIFA Selector] Could not set quantity for Match ${matchNumber}`);
           failCount++;
         }
 
-        // Wait before processing next match
         await delay(ACTION_DELAY);
 
       } catch (error) {
-        console.error(`[FIFA Selector] Error processing Match ${matchNumber}:`, error);
+        console.error(`[FIFA Selector] Error on Match ${matchNumber}:`, error);
         failCount++;
       }
     }
 
     console.log(`[FIFA Selector] Complete! Success: ${successCount}, Failed: ${failCount}`);
-
-    // Show notification to user
-    showNotification(`Selection complete! ${successCount} matches selected, ${failCount} failed.`);
+    showNotification(`Done! ${successCount} matches selected, ${failCount} failed.`);
   }
 
-  // Show a notification on the page
   function showNotification(message) {
+    const existing = document.getElementById('fifa-selector-notification');
+    if (existing) existing.remove();
+
     const notification = document.createElement('div');
+    notification.id = 'fifa-selector-notification';
     notification.style.cssText = `
       position: fixed;
       top: 20px;
@@ -265,48 +368,33 @@
       font-weight: 500;
       z-index: 999999;
       box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-      animation: slideIn 0.3s ease;
     `;
     notification.textContent = message;
-
-    // Add animation keyframes
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes slideIn {
-        from { transform: translateX(100%); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-      }
-    `;
-    document.head.appendChild(style);
     document.body.appendChild(notification);
 
-    // Remove after 4 seconds
-    setTimeout(() => {
-      notification.style.animation = 'slideIn 0.3s ease reverse';
-      setTimeout(() => notification.remove(), 300);
-    }, 4000);
+    setTimeout(() => notification.remove(), 5000);
   }
 
-  // Listen for messages from background script (for hotkey)
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === 'selectMatches') {
-      selectAllMatches();
-      sendResponse({ status: 'started' });
-    }
-    return true;
-  });
-
-  // Also allow triggering via keyboard shortcut directly in page
+  // Keyboard shortcut
   document.addEventListener('keydown', (e) => {
-    // Ctrl+Shift+S or Cmd+Shift+S
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 's') {
       e.preventDefault();
       selectAllMatches();
     }
   });
 
-  // Log that the extension is loaded
-  console.log('[FIFA Selector] Extension loaded. Press Ctrl+Shift+S to select configured matches.');
-  console.log('[FIFA Selector] Configured matches:', MATCH_CONFIG.length);
+  // Listen for messages from background
+  if (typeof chrome !== 'undefined' && chrome.runtime) {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message.action === 'selectMatches') {
+        selectAllMatches();
+        sendResponse({ status: 'started' });
+      }
+      return true;
+    });
+  }
+
+  console.log('[FIFA Selector] Extension loaded. Press Ctrl+Shift+S to select matches.');
+  console.log('[FIFA Selector] Configured:', MATCH_CONFIG.length, 'matches');
 
 })();

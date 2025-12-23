@@ -14,7 +14,7 @@
         "https://*.tickets.fifa.com/*",
         "https://fifa-fwc26-us.tickets.fifa.com/*"
       ],
-      "js": ["config.js", "content.js"],
+      "js": ["content.js"],
       "run_at": "document_idle"
     }
   ],
