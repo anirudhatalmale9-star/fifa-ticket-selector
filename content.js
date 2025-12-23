@@ -392,26 +392,67 @@ const ACTION_DELAY = 2000; // Delay between actions in ms (increased for slow lo
         await delay(ACTION_DELAY);
 
         // Now find and click the + button (it should be visible after clicking the category)
-        // Search for + button in the expanded category area
-        const plusButtons = document.querySelectorAll('button');
+        // The + button has aria-label="Increase quantity..." or class containing "increase"
         let qtyOk = false;
 
-        for (const btn of plusButtons) {
-          const text = btn.textContent?.trim();
+        // Strategy 1: Find by aria-label containing "Increase quantity"
+        const increaseButtons = document.querySelectorAll('button[aria-label*="Increase quantity"]');
+        console.log(`[FIFA Selector] Found ${increaseButtons.length} increase buttons by aria-label`);
+
+        for (const btn of increaseButtons) {
           const rect = btn.getBoundingClientRect();
-          // Only consider visible + buttons
-          if (text === '+' && rect.width > 0 && rect.height > 0) {
-            console.log(`[FIFA Selector] Found + button, clicking ${quantity} times...`);
+          // Only consider visible buttons
+          if (rect.width > 0 && rect.height > 0) {
+            console.log(`[FIFA Selector] Found + button via aria-label, clicking ${quantity} times...`);
             for (let i = 0; i < quantity; i++) {
               btn.click();
-              await delay(300);
+              await delay(500);
             }
             qtyOk = true;
             break;
           }
         }
 
-        // Old method as fallback
+        // Strategy 2: Find by class containing "increase"
+        if (!qtyOk) {
+          const increaseByClass = document.querySelectorAll('button[class*="increase"], button[class*="quantity-increase"]');
+          console.log(`[FIFA Selector] Found ${increaseByClass.length} increase buttons by class`);
+
+          for (const btn of increaseByClass) {
+            const rect = btn.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+              console.log(`[FIFA Selector] Found + button via class, clicking ${quantity} times...`);
+              for (let i = 0; i < quantity; i++) {
+                btn.click();
+                await delay(500);
+              }
+              qtyOk = true;
+              break;
+            }
+          }
+        }
+
+        // Strategy 3: Find button with SVG remixicon (the + icon)
+        if (!qtyOk) {
+          const allButtons = document.querySelectorAll('button');
+          for (const btn of allButtons) {
+            const hasSvg = btn.querySelector('svg.remixicon, svg[class*="remix"]');
+            const ariaLabel = btn.getAttribute('aria-label') || '';
+            const rect = btn.getBoundingClientRect();
+
+            if (hasSvg && ariaLabel.toLowerCase().includes('increase') && rect.width > 0 && rect.height > 0) {
+              console.log(`[FIFA Selector] Found + button via SVG, clicking ${quantity} times...`);
+              for (let i = 0; i < quantity; i++) {
+                btn.click();
+                await delay(500);
+              }
+              qtyOk = true;
+              break;
+            }
+          }
+        }
+
+        // Old method as fallback (text-based)
         if (!qtyOk) {
           qtyOk = await setQuantity(container, categoryEl, quantity);
         }
