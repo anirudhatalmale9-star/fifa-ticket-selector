@@ -495,6 +495,27 @@ const ACTION_DELAY = 2000; // Delay between actions in ms (increased for slow lo
           failCount++;
         }
 
+        // IMPORTANT: Collapse the category by clicking it again to avoid conflicts with next match
+        if (categoryEl) {
+          console.log(`[FIFA Selector] Collapsing category for Match ${matchNumber}...`);
+          categoryEl.click();
+          await delay(500);
+        }
+
+        // Also try to collapse by clicking "Show less" if it exists
+        const showLessButtons = container.querySelectorAll('span.p-button-label, span[class*="button-label"]');
+        for (const label of showLessButtons) {
+          if (label.textContent?.trim()?.toLowerCase() === 'show less') {
+            const btn = label.closest('button') || label.parentElement;
+            if (btn) {
+              console.log(`[FIFA Selector] Clicking Show less to collapse match`);
+              btn.click();
+              await delay(500);
+            }
+            break;
+          }
+        }
+
         await delay(ACTION_DELAY);
 
       } catch (error) {
