@@ -93,22 +93,53 @@ const ACTION_DELAY = 2000; // Delay between actions in ms (increased for slow lo
 
   // Expand match to show categories
   async function expandMatch(container) {
-    // Look for "Show more" text
-    const allSpans = container.querySelectorAll('span, div, a, button');
+    // Strategy 1: Find the "Show more" button by looking for span.p-button-label with "Show more" text
+    const buttonLabels = container.querySelectorAll('span.p-button-label, span[class*="button-label"]');
+    for (const label of buttonLabels) {
+      if (label.textContent?.trim()?.toLowerCase() === 'show more') {
+        // Click the parent button, not just the span
+        const btn = label.closest('button') || label.parentElement;
+        if (btn) {
+          console.log('[FIFA Selector] Clicking Show more button (via p-button-label)');
+          btn.click();
+          await delay(ACTION_DELAY);
+          return true;
+        }
+      }
+    }
 
+    // Strategy 2: Find button with aria-label containing "Show more"
+    const showMoreButtons = container.querySelectorAll('button[aria-label*="Show"], button[aria-label*="show"]');
+    for (const btn of showMoreButtons) {
+      console.log('[FIFA Selector] Clicking Show more button (via aria-label)');
+      btn.click();
+      await delay(ACTION_DELAY);
+      return true;
+    }
+
+    // Strategy 3: Look for "Show more" text in any element
+    const allSpans = container.querySelectorAll('span, div, a, button');
     for (const el of allSpans) {
       const text = el.textContent?.trim()?.toLowerCase();
       if (text === 'show more') {
-        console.log('[FIFA Selector] Clicking Show more');
-        el.click();
+        // Try to find and click the button parent
+        const btn = el.closest('button');
+        if (btn) {
+          console.log('[FIFA Selector] Clicking Show more button (found parent)');
+          btn.click();
+        } else {
+          console.log('[FIFA Selector] Clicking Show more element directly');
+          el.click();
+        }
         await delay(ACTION_DELAY);
         return true;
       }
     }
 
-    // Try finding expandable elements with aria-expanded
+    // Strategy 4: Try finding expandable elements with aria-expanded
     const expandables = container.querySelectorAll('[aria-expanded="false"]');
     for (const exp of expandables) {
+      console.log('[FIFA Selector] Clicking aria-expanded element');
       exp.click();
       await delay(ACTION_DELAY / 2);
     }
